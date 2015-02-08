@@ -8,7 +8,6 @@
 #include "Server.h"
 #include "Item.h"
 #include "Root.h"
-#include "IniFile.h"
 #include "ChunkMap.h"
 #include "Generating/ChunkDesc.h"
 #include "SetChunkData.h"
@@ -261,8 +260,8 @@ void cWorld::cTickThread::Execute(void)
 
 cWorld::cWorld(const AString & a_WorldName, eDimension a_Dimension, const AString & a_OverworldName) :
 	m_WorldName(a_WorldName),
-	m_OverworldName(a_OverworldName),
-	m_IniFileName(m_WorldName + "/world.ini"),
+	m_IniFileName(a_WorldName + "/world.ini"),
+	m_OverworldName("LinkedWorlds", "OverworldName", a_WorldName + "/world.ini", a_OverworldName),
 	m_StorageSchema("Default"),
 #ifdef __arm__
 	m_StorageCompressionFactor(0),
@@ -276,7 +275,7 @@ cWorld::cWorld(const AString & a_WorldName, eDimension a_Dimension, const AStrin
 	m_SpawnZ(0),
 	m_BroadcastDeathMessages(true),
 	m_BroadcastAchievementMessages(true),
-	m_IsDaylightCycleEnabled(true),
+	m_IsDaylightCycleEnabled("General", "IsDaylightCycleEnabled", a_WorldName + "/world.ini", true),
 	m_WorldAge(0),
 	m_TimeOfDay(0),
 	m_LastTimeUpdate(0),
@@ -312,10 +311,12 @@ cWorld::cWorld(const AString & a_WorldName, eDimension a_Dimension, const AStrin
 	m_IsPumpkinBonemealable(true),
 	m_IsSaplingBonemealable(true),
 	m_IsSugarcaneBonemealable(false),
-	m_bCommandBlocksEnabled(true),
-	m_bUseChatPrefixes(false),
-	m_TNTShrapnelLevel(slNone),
+	m_bCommandBlocksEnabled("Mechanics", "CommandBlocksEnabled", a_WorldName + "/world.ini", true),
+	m_bUseChatPrefixes("Mechanics", "UseChatPrefixes", a_WorldName + "/world.ini", false),
+	m_TNTShrapnelLevel("Physics", "TNTShrapnelLevel", a_WorldName + "/world.ini", slAll),
 	m_MaxViewDistance(12),
+	m_NetherWorldName("LinkedWorlds", "NetherWorldName", a_WorldName + "/world.ini", ""),
+	m_EndWorldName("LinkedWorlds", "EndWorldName", a_WorldName + "/world.ini", ""),
 	m_Scoreboard(this),
 	m_MapManager(this),
 	m_GeneratorCallbacks(*this),
@@ -826,19 +827,6 @@ void cWorld::Stop(void)
 	// Write settings to file; these are all plugin changeable values - keep updated!
 	cIniFile IniFile;
 	IniFile.ReadFile(m_IniFileName);
-		if (GetDimension() == dimOverworld)
-		{
-			IniFile.SetValue("LinkedWorlds", "NetherWorldName", m_NetherWorldName);
-			IniFile.SetValue("LinkedWorlds", "EndWorldName", m_EndWorldName);
-		}
-		else
-		{
-			IniFile.SetValue("LinkedWorlds", "OverworldName", m_OverworldName);
-		}
-		IniFile.SetValueI("Physics", "TNTShrapnelLevel", (int)m_TNTShrapnelLevel);
-		IniFile.SetValueB("Mechanics", "CommandBlocksEnabled", m_bCommandBlocksEnabled);
-		IniFile.SetValueB("Mechanics", "UseChatPrefixes", m_bUseChatPrefixes);
-		IniFile.SetValueB("General", "IsDaylightCycleEnabled", m_IsDaylightCycleEnabled);
 		IniFile.SetValueI("General", "Weather", (int)m_Weather);
 		IniFile.SetValueI("General", "TimeInTicks", GetTimeOfDay());
 	IniFile.WriteFile(m_IniFileName);
@@ -872,7 +860,7 @@ void cWorld::Tick(std::chrono::milliseconds a_Dt, std::chrono::milliseconds a_La
 
 	m_WorldAge += a_Dt;
 
-	if (m_IsDaylightCycleEnabled)
+	if (m_IsDaylightCycleEnabled())
 	{
 		// We need sub-tick precision here, that's why we store the time in milliseconds and calculate ticks off of it
 		m_TimeOfDay += a_Dt;
@@ -2405,7 +2393,7 @@ void cWorld::BroadcastTimeUpdate(const cClientHandle * a_Exclude)
 		{
 			continue;
 		}
-		ch->SendTimeUpdate(std::chrono::duration_cast<cTickTimeLong>(m_WorldAge).count(), std::chrono::duration_cast<cTickTimeLong>(m_TimeOfDay).count(), m_IsDaylightCycleEnabled);
+		ch->SendTimeUpdate(std::chrono::duration_cast<cTickTimeLong>(m_WorldAge).count(), std::chrono::duration_cast<cTickTimeLong>(m_TimeOfDay).count(), m_IsDaylightCycleEnabled());
 	}
 }
 

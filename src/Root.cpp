@@ -23,6 +23,7 @@
 #ifdef _WIN32
 	#include <conio.h>
 	#include <psapi.h>
+	#include <ShObjIdl.h>
 #elif defined(__linux__)
 	#include <fstream>
 #elif defined(__APPLE__)
@@ -98,6 +99,10 @@ void cRoot::Start(void)
 	HWND hwnd = GetConsoleWindow();
 	HMENU hmenu = GetSystemMenu(hwnd, FALSE);
 	EnableMenuItem(hmenu, SC_CLOSE, MF_GRAYED);  // Disable close button when starting up; it causes problems with our CTRL-CLOSE handling
+
+	ITaskbarList3 * TaskbarIcon = nullptr;
+	CoInitialize(nullptr);
+	CoCreateInstance(CLSID_TaskbarList, nullptr, CLSCTX_INPROC_SERVER, IID_ITaskbarList3, (void **)&TaskbarIcon);
 	#endif
 	
 	cLogger::cListener * consoleLogListener = MakeConsoleListener();
@@ -124,6 +129,7 @@ void cRoot::Start(void)
 
 		LOG("Creating new server instance...");
 		m_Server = new cServer();
+		TaskbarIcon->SetProgressValue(hwnd, 5, 100);
 
 		LOG("Reading server config...");
 		cIniFile IniFile;
@@ -134,6 +140,7 @@ void cRoot::Start(void)
 			IniFile.AddHeaderComment(" Most of the settings here can be configured using the webadmin interface, if enabled in webadmin.ini");
 			IniFile.AddHeaderComment(" See: http://wiki.mc-server.org/doku.php?id=configure:settings.ini for further configuration help");
 		}
+		TaskbarIcon->SetProgressValue(hwnd, 10, 100);
 
 		LOG("Starting server...");
 		m_MojangAPI = new cMojangAPI;
@@ -145,45 +152,54 @@ void cRoot::Start(void)
 			LOGERROR("Failure starting server, aborting...");
 			return;
 		}
+		TaskbarIcon->SetProgressValue(hwnd, 15, 100);
 
 		m_WebAdmin = new cWebAdmin();
 		m_WebAdmin->Init();
+		TaskbarIcon->SetProgressValue(hwnd, 20, 100);
 
 		LOGD("Loading settings...");
 		m_RankManager.reset(new cRankManager());
 		m_RankManager->Initialize(*m_MojangAPI);
 		m_CraftingRecipes = new cCraftingRecipes;
-		m_FurnaceRecipe   = new cFurnaceRecipe();
+		m_FurnaceRecipe = new cFurnaceRecipe();
+		TaskbarIcon->SetProgressValue(hwnd, 25, 100);
 		
 		LOGD("Loading worlds...");
 		LoadWorlds(IniFile);
+		TaskbarIcon->SetProgressValue(hwnd, 40, 100);
 
 		LOGD("Loading plugin manager...");
 		m_PluginManager = new cPluginManager();
 		m_PluginManager->ReloadPluginsNow(IniFile);
+		TaskbarIcon->SetProgressValue(hwnd, 45, 100);
 		
 		LOGD("Loading MonsterConfig...");
 		m_MonsterConfig = new cMonsterConfig;
+		TaskbarIcon->SetProgressValue(hwnd, 50, 100);
 
 		// This sets stuff in motion
 		LOGD("Starting Authenticator...");
 		m_Authenticator.Start(IniFile);
+		TaskbarIcon->SetProgressValue(hwnd, 55, 100);
 		
 		LOGD("Starting worlds...");
 		StartWorlds();
+		TaskbarIcon->SetProgressValue(hwnd, 70, 100);
 		
 		if (IniFile.GetValueSetB("DeadlockDetect", "Enabled", true))
 		{
 			LOGD("Starting deadlock detector...");
 			dd.Start(IniFile.GetValueSetI("DeadlockDetect", "IntervalSec", 20));
 		}
+		TaskbarIcon->SetProgressValue(hwnd, 85, 100);
 		
 		IniFile.WriteFile("settings.ini");
 
 		LOGD("Finalising startup...");
-		m_Server->Start();
-		
+		m_Server->Start();		
 		m_WebAdmin->Start();
+		TaskbarIcon->SetProgressValue(hwnd, 90, 100);
 
 		#if !defined(ANDROID_NDK)
 		LOGD("Starting InputThread...");
@@ -197,6 +213,7 @@ void cRoot::Start(void)
 			LOGERROR("cRoot::Start (std::thread) error %i: could not construct input thread; %s", a_Exception.code().value(), a_Exception.what());
 		}
 		#endif
+		TaskbarIcon->SetProgressState(hwnd, TBPF_NOPROGRESS);
 
 		LOG("Startup complete, took %ldms!", static_cast<long int>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - BeginTime).count()));
 		#ifdef _WIN32
@@ -301,7 +318,7 @@ void cRoot::LoadWorlds(cIniFile & IniFile)
 			continue;
 		}
 		FoundAdditionalWorlds = true;
-		cWorld* NewWorld = new cWorld( WorldName.c_str());
+		cWorld* NewWorld = new cWorld(WorldName.c_str());
 		m_WorldsByName[ WorldName ] = NewWorld;
 	}  // for i - Worlds
 

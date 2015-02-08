@@ -27,6 +27,7 @@
 #include "Blocks/BroadcastInterface.h"
 #include "FastRandom.h"
 #include "ClientHandle.h"
+#include "IniFile.h"
 
 
 
@@ -70,6 +71,63 @@ typedef cItemCallback<cCommandBlockEntity> cCommandBlockCallback;
 typedef cItemCallback<cMobHeadEntity>      cMobHeadCallback;
 typedef cItemCallback<cFlowerPotEntity>    cFlowerPotCallback;
 
+
+
+
+
+template <class ValueType>
+class cPluginChangeableValue
+{
+public:
+	cPluginChangeableValue<ValueType>::cPluginChangeableValue(const AString & a_Keyname, const AString & a_ValueName, const AString & a_IniFileName, const ValueType & a_InitialValue) :
+		m_StoredValue(a_InitialValue),
+		m_Keyname(a_Keyname),
+		m_ValueName(a_ValueName),
+		m_IniFileName(a_IniFileName)
+	{
+	}
+
+	const ValueType & operator()() const { return m_StoredValue; }
+	void operator=(const ValueType & a_NewValue)
+	{
+		m_StoredValue = a_NewValue;
+
+		if (m_ShouldUpdate)
+		{
+			cIniFile IniFile;
+			IniFile.ReadFile(m_IniFileName);
+			Write<ValueType>(IniFile);
+			IniFile.WriteFile(m_IniFileName);
+		}
+	}
+
+	template<typename U = T, typename std::enable_if<std::is_same<U, int>::value || std::is_same<U, eShrapnelLevel>::value, std::size_t>::type = 0>
+	void Write(cIniFile & a_IniFile)
+	{
+		a_IniFile.SetValueI(m_Keyname, m_ValueName, (int)m_StoredValue);
+	}
+
+	template<typename U = T, typename std::enable_if<std::is_same<U, bool>::value, std::size_t>::type = 0>
+	void Write(cIniFile & a_IniFile)
+	{
+		a_IniFile.SetValueB(m_Keyname, m_ValueName, m_StoredValue);
+	}
+
+	template<typename U = T, typename std::enable_if<!std::is_same<U, bool>::value && !std::is_same<U, int>::value && !std::is_same<U, eShrapnelLevel>::value, std::size_t>::type = 0>
+	void Write(cIniFile & a_IniFile)
+	{
+		a_IniFile.SetValue(m_Keyname, m_ValueName, m_StoredValue);
+	}
+
+	void SetShouldUpdate(bool a_ShouldUpdate) { m_ShouldUpdate = a_ShouldUpdate; }
+
+private:
+	ValueType m_StoredValue;
+	AString m_Keyname;
+	AString m_ValueName;
+	AString m_IniFileName;
+	bool m_ShouldUpdate;
+};
 
 
 
@@ -148,7 +206,7 @@ public:
 	int GetTicksUntilWeatherChange(void) const { return m_WeatherInterval; }
 
 	/** Is the daylight cyclus enabled? */
-	virtual bool IsDaylightCycleEnabled(void) const { return m_IsDaylightCycleEnabled; }
+	virtual bool IsDaylightCycleEnabled(void) const { return m_IsDaylightCycleEnabled(); }
 
 	/** Sets the daylight cyclus to true/false. */
 	virtual void SetDaylightCycleEnabled(bool a_IsDaylightCycleEnabled)
@@ -651,10 +709,10 @@ public:
 	/** Returns the associated map manager instance. */
 	cMapManager & GetMapManager(void) { return m_MapManager; }
 
-	bool AreCommandBlocksEnabled(void) const { return m_bCommandBlocksEnabled; }
+	bool AreCommandBlocksEnabled(void) const { return m_bCommandBlocksEnabled(); }
 	void SetCommandBlocksEnabled(bool a_Flag) { m_bCommandBlocksEnabled = a_Flag; }
 
-	eShrapnelLevel GetTNTShrapnelLevel(void) const { return m_TNTShrapnelLevel; }
+	eShrapnelLevel GetTNTShrapnelLevel(void) const { return m_TNTShrapnelLevel(); }
 	void SetTNTShrapnelLevel(eShrapnelLevel a_Flag) { m_TNTShrapnelLevel = a_Flag; }
 
 	int GetMaxViewDistance(void) const { return m_MaxViewDistance; }
@@ -663,20 +721,20 @@ public:
 		m_MaxViewDistance = Clamp(a_MaxViewDistance, cClientHandle::MIN_VIEW_DISTANCE, cClientHandle::MAX_VIEW_DISTANCE);
 	}
 
-	bool ShouldUseChatPrefixes(void) const { return m_bUseChatPrefixes; }
+	bool ShouldUseChatPrefixes(void) const { return m_bUseChatPrefixes(); }
 	void SetShouldUseChatPrefixes(bool a_Flag) { m_bUseChatPrefixes = a_Flag; }
 
 	bool ShouldBroadcastDeathMessages(void) const { return m_BroadcastDeathMessages; }
 	bool ShouldBroadcastAchievementMessages(void) const { return m_BroadcastAchievementMessages; }
 
 
-	AString GetNetherWorldName(void) const { return m_NetherWorldName; }
+	AString GetNetherWorldName(void) const { return m_NetherWorldName(); }
 	void SetNetherWorldName(const AString & a_Name) { m_NetherWorldName = a_Name; }
 
-	AString GetEndWorldName(void) const { return m_EndWorldName; }
+	AString GetEndWorldName(void) const { return m_EndWorldName(); }
 	void SetEndWorldName(const AString & a_Name) { m_EndWorldName = a_Name; }
 
-	AString GetLinkedOverworldName(void) const { return m_OverworldName; }
+	AString GetLinkedOverworldName(void) const { return m_OverworldName(); }
 	void SetLinkedOverworldName(const AString & a_Name) { m_OverworldName = a_Name; }
 	
 	// tolua_end
@@ -884,14 +942,14 @@ private:
 	typedef std::list<cScheduledTaskPtr> cScheduledTasks;
 
 
+	AString m_IniFileName;
+
 	AString m_WorldName;
 
 	/** The name of the world that a portal in this world should link to
 	Only has effect if this world is a nether or end world, as it is used by entities to see which world to teleport to when in a portal
 	*/
-	AString m_OverworldName;
-
-	AString m_IniFileName;
+	cPluginChangeableValue<AString> m_OverworldName;
 	
 	/** Name of the storage schema used to load and save chunks */
 	AString m_StorageSchema;
@@ -912,7 +970,7 @@ private:
 	bool m_BroadcastDeathMessages;
 	bool m_BroadcastAchievementMessages;
 
-	bool   m_IsDaylightCycleEnabled;
+	cPluginChangeableValue<bool> m_IsDaylightCycleEnabled;
 	// std::chrono::milliseconds is guaranteed to be good for 292 years by the standard.
 	std::chrono::milliseconds  m_WorldAge;
 	std::chrono::milliseconds  m_TimeOfDay;
@@ -969,24 +1027,24 @@ private:
 	bool m_IsSugarcaneBonemealable;
 
 	/** Whether command blocks are enabled or not */
-	bool m_bCommandBlocksEnabled;
+	cPluginChangeableValue<bool> m_bCommandBlocksEnabled;
 	
 	/** Whether prefixes such as [INFO] are prepended to SendMessageXXX() / BroadcastChatXXX() functions */
-	bool m_bUseChatPrefixes;
+	cPluginChangeableValue<bool> m_bUseChatPrefixes;
 
 	/** The level of DoExplosionAt() projecting random affected blocks as FallingBlock entities
 	See the eShrapnelLevel enumeration for details
 	*/
-	eShrapnelLevel m_TNTShrapnelLevel;
+	cPluginChangeableValue<eShrapnelLevel> m_TNTShrapnelLevel;
 
 	/** The maximum view distance that a player can have in this world. */
 	int m_MaxViewDistance;
 
 	/** Name of the nether world */
-	AString m_NetherWorldName;
+	cPluginChangeableValue<AString> m_NetherWorldName;
 
 	/** Name of the end world */
-	AString m_EndWorldName;
+	cPluginChangeableValue<AString> m_EndWorldName;
 	
 
 	cChunkGenerator  m_Generator;
