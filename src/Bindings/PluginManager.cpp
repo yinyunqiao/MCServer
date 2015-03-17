@@ -505,6 +505,24 @@ bool cPluginManager::CallHookEntityAddEffect(cEntity & a_Entity, int a_EffectTyp
 
 
 
+bool cPluginManager::CallHookEntityTeleport(cEntity & a_Entity, const Vector3d & a_OldPosition, const Vector3d & a_NewPosition)
+{
+	FIND_HOOK(HOOK_ENTITY_TELEPORT);
+	VERIFY_HOOK;
+
+	for (PluginList::iterator itr = Plugins->second.begin(); itr != Plugins->second.end(); ++itr)
+	{
+		if ((*itr)->OnEntityTeleport(a_Entity, a_OldPosition, a_NewPosition))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+
+
+
 bool cPluginManager::CallHookExecuteCommand(cPlayer * a_Player, const AStringVector & a_Split)
 {
 	FIND_HOOK(HOOK_EXECUTE_COMMAND);
@@ -1447,7 +1465,7 @@ cPluginManager::CommandResult cPluginManager::HandleCommand(cPlayer & a_Player, 
 
 	ASSERT(cmd->second.m_Plugin != nullptr);
 
-	if (!cmd->second.m_Plugin->HandleCommand(Split, a_Player))
+	if (!cmd->second.m_Plugin->HandleCommand(Split, a_Player, a_Command))
 	{
 		return crError;
 	}
@@ -1750,7 +1768,7 @@ bool cPluginManager::IsConsoleCommandBound(const AString & a_Command)
 
 
 
-bool cPluginManager::ExecuteConsoleCommand(const AStringVector & a_Split, cCommandOutputCallback & a_Output)
+bool cPluginManager::ExecuteConsoleCommand(const AStringVector & a_Split, cCommandOutputCallback & a_Output, const AString & a_Command)
 {
 	if (a_Split.empty())
 	{
@@ -1777,7 +1795,7 @@ bool cPluginManager::ExecuteConsoleCommand(const AStringVector & a_Split, cComma
 		return false;
 	}
 
-	return cmd->second.m_Plugin->HandleConsoleCommand(a_Split, a_Output);
+	return cmd->second.m_Plugin->HandleConsoleCommand(a_Split, a_Output, a_Command);
 }
 
 

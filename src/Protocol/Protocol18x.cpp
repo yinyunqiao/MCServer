@@ -108,8 +108,17 @@ cProtocol180::cProtocol180(cClientHandle * a_Client, const AString & a_ServerAdd
 	{
 		static int sCounter = 0;
 		cFile::CreateFolder("CommLogs");
-		AString FileName = Printf("CommLogs/%x_%d__%s.log", (unsigned)time(nullptr), sCounter++, a_Client->GetIPString().c_str());
-		m_CommLogFile.Open(FileName, cFile::fmWrite);
+		AString IP(a_Client->GetIPString());
+		ReplaceString(IP, ":", "_");
+		AString FileName = Printf("CommLogs/%x_%d__%s.log",
+			static_cast<unsigned>(time(nullptr)),
+			sCounter++,
+			IP.c_str()
+		);
+		if (!m_CommLogFile.Open(FileName, cFile::fmWrite))
+		{
+			LOG("Cannot log communication to file, the log file \"%s\" cannot be opened for writing.", FileName.c_str());
+		}
 	}
 }
 
@@ -377,7 +386,7 @@ void cProtocol180::SendEntityLook(const cEntity & a_Entity)
 	Pkt.WriteVarInt(a_Entity.GetUniqueID());
 	Pkt.WriteByteAngle(a_Entity.GetYaw());
 	Pkt.WriteByteAngle(a_Entity.GetPitch());
-	Pkt.WriteBool(true);  // TODO: IsOnGround() on entities
+	Pkt.WriteBool(a_Entity.IsOnGround());
 }
 
 
@@ -420,7 +429,7 @@ void cProtocol180::SendEntityRelMove(const cEntity & a_Entity, char a_RelX, char
 	Pkt.WriteByte(a_RelX);
 	Pkt.WriteByte(a_RelY);
 	Pkt.WriteByte(a_RelZ);
-	Pkt.WriteBool(true);  // TODO: IsOnGround() on entities
+	Pkt.WriteBool(a_Entity.IsOnGround());
 }
 
 
@@ -438,7 +447,7 @@ void cProtocol180::SendEntityRelMoveLook(const cEntity & a_Entity, char a_RelX, 
 	Pkt.WriteByte(a_RelZ);
 	Pkt.WriteByteAngle(a_Entity.GetYaw());
 	Pkt.WriteByteAngle(a_Entity.GetPitch());
-	Pkt.WriteBool(true);  // TODO: IsOnGround() on entities
+	Pkt.WriteBool(a_Entity.IsOnGround());
 }
 
 
@@ -623,19 +632,11 @@ void cProtocol180::SendPaintingSpawn(const cPainting & a_Painting)
 	double PosY = a_Painting.GetPosY();
 	double PosZ = a_Painting.GetPosZ();
 
-	switch (a_Painting.GetDirection())
-	{
-		case 0: PosZ += 1; break;
-		case 1: PosX -= 1; break;
-		case 2: PosZ -= 1; break;
-		case 3: PosX += 1; break;
-	}
-
 	cPacketizer Pkt(*this, 0x10);  // Spawn Painting packet
 	Pkt.WriteVarInt(a_Painting.GetUniqueID());
 	Pkt.WriteString(a_Painting.GetName().c_str());
 	Pkt.WritePosition((int)PosX, (int)PosY, (int)PosZ);
-	Pkt.WriteChar(a_Painting.GetDirection());
+	Pkt.WriteChar(a_Painting.GetProtocolFacing());
 }
 
 
@@ -865,11 +866,15 @@ void cProtocol180::SendPlayerListUpdatePing(const cPlayer & a_Player)
 {
 	ASSERT(m_State == 3);  // In game mode?
 
-	cPacketizer Pkt(*this, 0x38);  // Playerlist Item packet
-	Pkt.WriteVarInt(2);
-	Pkt.WriteVarInt(1);
-	Pkt.WriteUUID(a_Player.GetUUID());
-	Pkt.WriteVarInt((UInt32)a_Player.GetClientHandle()->GetPing());
+	auto ClientHandle = a_Player.GetClientHandlePtr();
+	if (ClientHandle != nullptr)
+	{
+		cPacketizer Pkt(*this, 0x38);  // Playerlist Item packet
+		Pkt.WriteVarInt(2);
+		Pkt.WriteVarInt(1);
+		Pkt.WriteUUID(a_Player.GetUUID());
+		Pkt.WriteVarInt(static_cast<UInt32>(ClientHandle->GetPing()));
+	}
 }
 
 
@@ -938,7 +943,7 @@ void cProtocol180::SendPlayerMoveLook(void)
 	Pkt.WriteDouble(Player->GetPosX());
 	
 	// The "+ 0.001" is there because otherwise the player falls through the block they were standing on.
-	Pkt.WriteDouble(Player->GetStance() + 0.001);
+	Pkt.WriteDouble(Player->GetPosY() + 0.001);
 	
 	Pkt.WriteDouble(Player->GetPosZ());
 	Pkt.WriteFloat((float)Player->GetYaw());
@@ -967,7 +972,7 @@ void cProtocol180::SendPlayerSpawn(const cPlayer & a_Player)
 	Pkt.WriteVarInt(a_Player.GetUniqueID());
 	Pkt.WriteUUID(cMojangAPI::MakeUUIDShort(a_Player.GetUUID()));
 	Pkt.WriteFPInt(a_Player.GetPosX());
-	Pkt.WriteFPInt(a_Player.GetPosY());
+	Pkt.WriteFPInt(a_Player.GetPosY() + 0.001);  // The "+ 0.001" is there because otherwise the player falls through the block they were standing on.
 	Pkt.WriteFPInt(a_Player.GetPosZ());
 	Pkt.WriteByteAngle(a_Player.GetYaw());
 	Pkt.WriteByteAngle(a_Player.GetPitch());
@@ -1296,7 +1301,7 @@ void cProtocol180::SendTeleportEntity(const cEntity & a_Entity)
 	Pkt.WriteFPInt(a_Entity.GetPosZ());
 	Pkt.WriteByteAngle(a_Entity.GetYaw());
 	Pkt.WriteByteAngle(a_Entity.GetPitch());
-	Pkt.WriteBool(true);  // TODO: IsOnGrond() on entities
+	Pkt.WriteBool(a_Entity.IsOnGround());
 }
 
 
@@ -1659,7 +1664,7 @@ void cProtocol180::FixItemFramePositions(int a_ObjectData, double & a_PosX, doub
 void cProtocol180::AddReceivedData(const char * a_Data, size_t a_Size)
 {
 	// Write the incoming data into the comm log file:
-	if (g_ShouldLogCommIn)
+	if (g_ShouldLogCommIn && m_CommLogFile.IsOpen())
 	{
 		if (m_ReceivedData.GetReadableSpace() > 0)
 		{
@@ -1764,7 +1769,7 @@ void cProtocol180::AddReceivedData(const char * a_Data, size_t a_Size)
 		bb.Write("\0", 1);
 		
 		// Log the packet info into the comm log file:
-		if (g_ShouldLogCommIn)
+		if (g_ShouldLogCommIn && m_CommLogFile.IsOpen())
 		{
 			AString PacketData;
 			bb.ReadAll(PacketData);
@@ -1796,7 +1801,7 @@ void cProtocol180::AddReceivedData(const char * a_Data, size_t a_Size)
 			#endif  // _DEBUG
 			
 			// Put a message in the comm log:
-			if (g_ShouldLogCommIn)
+			if (g_ShouldLogCommIn && m_CommLogFile.IsOpen())
 			{
 				m_CommLogFile.Printf("^^^^^^ Unhandled packet ^^^^^^\n\n\n");
 			}
@@ -1813,7 +1818,7 @@ void cProtocol180::AddReceivedData(const char * a_Data, size_t a_Size)
 			);
 
 			// Put a message in the comm log:
-			if (g_ShouldLogCommIn)
+			if (g_ShouldLogCommIn && m_CommLogFile.IsOpen())
 			{
 				m_CommLogFile.Printf("^^^^^^ Wrong number of bytes read for this packet (exp %d left, got " SIZE_T_FMT " left) ^^^^^^\n\n\n",
 					1, bb.GetReadableSpace()
@@ -1827,7 +1832,7 @@ void cProtocol180::AddReceivedData(const char * a_Data, size_t a_Size)
 	}  // for (ever)
 
 	// Log any leftover bytes into the logfile:
-	if (g_ShouldLogCommIn && (m_ReceivedData.GetReadableSpace() > 0))
+	if (g_ShouldLogCommIn && (m_ReceivedData.GetReadableSpace() > 0) && m_CommLogFile.IsOpen())
 	{
 		AString AllData;
 		size_t OldReadableSpace = m_ReceivedData.GetReadableSpace();
@@ -2092,9 +2097,7 @@ void cProtocol180::HandlePacketLoginStart(cByteBuffer & a_ByteBuffer)
 
 void cProtocol180::HandlePacketAnimation(cByteBuffer & a_ByteBuffer)
 {
-	HANDLE_READ(a_ByteBuffer, ReadBEInt, int,  EntityID);
-	HANDLE_READ(a_ByteBuffer, ReadByte,  Byte, Animation);
-	m_Client->HandleAnimation(Animation);
+	m_Client->HandleAnimation(1);  // Packet exists solely for arm-swing notification
 }
 
 
@@ -2798,7 +2801,7 @@ cProtocol180::cPacketizer::~cPacketizer()
 	}
 
 	// Log the comm into logfile:
-	if (g_ShouldLogCommOut)
+	if (g_ShouldLogCommOut && m_Protocol.m_CommLogFile.IsOpen())
 	{
 		AString Hex;
 		ASSERT(PacketData.size() > 0);

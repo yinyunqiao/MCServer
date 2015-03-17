@@ -106,6 +106,7 @@ public:
 	virtual bool OnPlayerRightClickingEntity(cPlayer & a_Player, cEntity & a_Entity) override;
 	virtual bool OnPlayerShooting           (cPlayer & a_Player) override;
 	virtual bool OnPlayerSpawned            (cPlayer & a_Player) override;
+	virtual bool OnEntityTeleport           (cEntity & a_Entity, const Vector3d & a_OldPosition, const Vector3d & a_NewPosition) override;
 	virtual bool OnPlayerTossingItem        (cPlayer & a_Player) override;
 	virtual bool OnPlayerUsedBlock          (cPlayer & a_Player, int a_BlockX, int a_BlockY, int a_BlockZ, char a_BlockFace, int a_CursorX, int a_CursorY, int a_CursorZ, BLOCKTYPE a_BlockType, NIBBLETYPE a_BlockMeta) override;
 	virtual bool OnPlayerUsedItem           (cPlayer & a_Player, int a_BlockX, int a_BlockY, int a_BlockZ, char a_BlockFace, int a_CursorX, int a_CursorY, int a_CursorZ) override;
@@ -130,9 +131,9 @@ public:
 	virtual bool OnWorldStarted             (cWorld & a_World) override;
 	virtual bool OnWorldTick                (cWorld & a_World, std::chrono::milliseconds a_Dt, std::chrono::milliseconds a_LastTickDurationMSec) override;
 	
-	virtual bool HandleCommand(const AStringVector & a_Split, cPlayer & a_Player) override;
+	virtual bool HandleCommand(const AStringVector & a_Split, cPlayer & a_Player, const AString & a_FullCommand) override;
 	
-	virtual bool HandleConsoleCommand(const AStringVector & a_Split, cCommandOutputCallback & a_Output) override;
+	virtual bool HandleConsoleCommand(const AStringVector & a_Split, cCommandOutputCallback & a_Output, const AString & a_FullCommand) override;
 
 	virtual void ClearCommands(void) override;
 	

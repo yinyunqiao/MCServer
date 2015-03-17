@@ -50,6 +50,7 @@
 #include "../Entities/ExpOrb.h"
 #include "../Entities/HangingEntity.h"
 #include "../Entities/ItemFrame.h"
+#include "../Entities/Painting.h"
 
 #include "../Protocol/MojangAPI.h"
 #include "Server.h"
@@ -1007,21 +1008,28 @@ cBlockEntity * cWSSAnvil::LoadFlowerPotFromNBT(const cParsedNBT & a_NBT, int a_T
 	}
 
 	std::unique_ptr<cFlowerPotEntity> FlowerPot(new cFlowerPotEntity(a_BlockX, a_BlockY, a_BlockZ, m_World));
-	short ItemType = 0, ItemData = 0;
+	cItem Item;
 
 	int currentLine = a_NBT.FindChildByName(a_TagIdx, "Item");
 	if (currentLine >= 0)
 	{
-		ItemType = (short) a_NBT.GetInt(currentLine);
+		if (a_NBT.GetType(currentLine) == TAG_String)
+		{
+			StringToItem(a_NBT.GetString(currentLine), Item);
+		}
+		else if (a_NBT.GetType(currentLine) == TAG_Int)
+		{
+			Item.m_ItemType = (short) a_NBT.GetInt(currentLine);
+		}
 	}
 
 	currentLine = a_NBT.FindChildByName(a_TagIdx, "Data");
-	if (currentLine >= 0)
+	if ((currentLine >= 0) && (a_NBT.GetType(currentLine) == TAG_Int))
 	{
-		ItemData = (short) a_NBT.GetInt(currentLine);
+		Item.m_ItemDamage = (short) a_NBT.GetInt(currentLine);
 	}
 
-	FlowerPot->SetItem(cItem(ItemType, 1, ItemData));
+	FlowerPot->SetItem(Item);
 	return FlowerPot.release();
 }
 
@@ -1329,6 +1337,10 @@ void cWSSAnvil::LoadEntityFromNBT(cEntityList & a_Entities, const cParsedNBT & a
 	else if (strncmp(a_IDTag, "Item", a_IDTagLength) == 0)
 	{
 		LoadPickupFromNBT(a_Entities, a_NBT, a_EntityTagIdx);
+	}
+	else if (strncmp(a_IDTag, "Painting", a_IDTagLength) == 0)
+	{
+		LoadPaintingFromNBT(a_Entities, a_NBT, a_EntityTagIdx);
 	}
 	else if (strncmp(a_IDTag, "PrimedTnt", a_IDTagLength) == 0)
 	{
@@ -1740,42 +1752,12 @@ void cWSSAnvil::LoadHangingFromNBT(cHangingEntity & a_Hanging, const cParsedNBT 
 {
 	// "Facing" tag is the prime source of the Facing; if not available, translate from older "Direction" or "Dir"
 	int Facing = a_NBT.FindChildByName(a_TagIdx, "Facing");
-	if (Facing > 0)
+	if (Facing < 0)
 	{
-		Facing = (int)a_NBT.GetByte(Facing);
-		if ((Facing >= 2) && (Facing <= 5))
-		{
-			a_Hanging.SetFacing(static_cast<eBlockFace>(Facing));
-		}
+		return;
 	}
-	else
-	{
-		Facing = a_NBT.FindChildByName(a_TagIdx, "Direction");
-		if (Facing > 0)
-		{
-			switch ((int)a_NBT.GetByte(Facing))
-			{
-				case 0: a_Hanging.SetFacing(BLOCK_FACE_ZM); break;
-				case 1: a_Hanging.SetFacing(BLOCK_FACE_XM); break;
-				case 2: a_Hanging.SetFacing(BLOCK_FACE_ZP); break;
-				case 3: a_Hanging.SetFacing(BLOCK_FACE_XP); break;
-			}
-		}
-		else
-		{
-			Facing = a_NBT.FindChildByName(a_TagIdx, "Dir");  // Has values 0 and 2 swapped
-			if (Facing > 0)
-			{
-				switch ((int)a_NBT.GetByte(Facing))
-				{
-					case 0: a_Hanging.SetFacing(BLOCK_FACE_ZP); break;
-					case 1: a_Hanging.SetFacing(BLOCK_FACE_XM); break;
-					case 2: a_Hanging.SetFacing(BLOCK_FACE_ZM); break;
-					case 3: a_Hanging.SetFacing(BLOCK_FACE_XP); break;
-				}
-			}
-		}
-	}
+
+	a_Hanging.SetProtocolFacing(a_NBT.GetByte(Facing));
 
 	int TileX = a_NBT.FindChildByName(a_TagIdx, "TileX");
 	int TileY = a_NBT.FindChildByName(a_TagIdx, "TileY");
@@ -1783,9 +1765,9 @@ void cWSSAnvil::LoadHangingFromNBT(cHangingEntity & a_Hanging, const cParsedNBT 
 	if ((TileX > 0) && (TileY > 0) && (TileZ > 0))
 	{
 		a_Hanging.SetPosition(
-			(double)a_NBT.GetInt(TileX),
-			(double)a_NBT.GetInt(TileY),
-			(double)a_NBT.GetInt(TileZ)
+			static_cast<double>(a_NBT.GetInt(TileX)),
+			static_cast<double>(a_NBT.GetInt(TileY)),
+			static_cast<double>(a_NBT.GetInt(TileZ))
 		);
 	}
 }
@@ -1825,6 +1807,29 @@ void cWSSAnvil::LoadItemFrameFromNBT(cEntityList & a_Entities, const cParsedNBT 
 	}
 	
 	a_Entities.push_back(ItemFrame.release());
+}
+
+
+
+
+
+void cWSSAnvil::LoadPaintingFromNBT(cEntityList & a_Entities, const cParsedNBT & a_NBT, int a_TagIdx)
+{
+	// Load painting name:
+	int MotiveTag = a_NBT.FindChildByName(a_TagIdx, "Motive");
+	if ((MotiveTag < 0) || (a_NBT.GetType(MotiveTag) != TAG_String))
+	{
+		return;
+	}
+
+	std::unique_ptr<cPainting> Painting(new cPainting(a_NBT.GetString(MotiveTag), BLOCK_FACE_NONE, 0.0, 0.0, 0.0));
+	if (!LoadEntityBaseFromNBT(*Painting.get(), a_NBT, a_TagIdx))
+	{
+		return;
+	}
+
+	LoadHangingFromNBT(*Painting.get(), a_NBT, a_TagIdx);
+	a_Entities.push_back(Painting.release());
 }
 
 
@@ -3136,8 +3141,11 @@ bool cWSSAnvil::cMCAFile::SetChunkData(const cChunkCoords & a_Chunk, const AStri
 	
 	// Add padding to 4K boundary:
 	size_t BytesWritten = a_Data.size() + MCA_CHUNK_HEADER_LENGTH;
-	static const char Padding[4095] = {0};
-	m_File.Write(Padding, 4096 - (BytesWritten % 4096));
+	if (BytesWritten % 4096 != 0)
+	{
+		static const char Padding[4095] = {0};
+		m_File.Write(Padding, 4096 - (BytesWritten % 4096));
+	}
 	
 	// Store the header:
 	ChunkSize = ((u_long)a_Data.size() + MCA_CHUNK_HEADER_LENGTH + 4095) / 4096;  // Round data size *up* to nearest 4KB sector, make it a sector number

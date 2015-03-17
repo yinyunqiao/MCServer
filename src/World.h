@@ -39,6 +39,9 @@ class cRedstoneSimulator;
 class cItem;
 class cPlayer;
 class cClientHandle;
+typedef SharedPtr<cClientHandle> cClientHandlePtr;
+typedef std::list<cClientHandlePtr> cClientHandlePtrs;
+typedef std::list<cClientHandle *> cClientHandles;
 class cEntity;
 class cBlockEntity;
 class cWorldGenerator;  // The generator that actually generates the chunks for a single world
@@ -1077,13 +1080,13 @@ private:
 	cCriticalSection  m_CSClients;
 	
 	/** List of clients in this world, these will be ticked by this world */
-	cClientHandleList m_Clients;
+	cClientHandlePtrs m_Clients;
 	
 	/** Clients that are scheduled for removal (ticked in another world), waiting for TickClients() to remove them */
-	cClientHandleList m_ClientsToRemove;
+	cClientHandles m_ClientsToRemove;
 	
 	/** Clients that are scheduled for adding, waiting for TickClients to add them */
-	cClientHandleList m_ClientsToAdd;
+	cClientHandlePtrs m_ClientsToAdd;
 
 	/** Guards m_EntitiesToAdd */
 	cCriticalSection m_CSEntitiesToAdd;
@@ -1131,6 +1134,9 @@ private:
 
 	/** <summary>Generates a random spawnpoint on solid land by walking chunks and finding their biomes</summary> */
 	void GenerateRandomSpawn(void);
+
+	/** Check if player starting point is acceptable **/
+	bool CheckPlayerSpawnPoint(int a_PosX, int a_PosY, int a_PosZ);
 
 	/** Chooses a reasonable transition from the current weather to a new weather **/
 	eWeather ChooseNewWeather(void);

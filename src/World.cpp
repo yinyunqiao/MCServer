@@ -668,18 +668,23 @@ void cWorld::Start(void)
 void cWorld::GenerateRandomSpawn(void)
 {
 	LOGD("Generating random spawnpoint...");
-
+	bool foundSpawnPoint = false;
 	// Look for a spawn point at most 100 chunks away from map center:
 	for (int i = 0; i < 100; i++)
 	{
 		EMCSBiome biome = GetBiomeAt((int)m_SpawnX, (int)m_SpawnZ);
+
 		if (
 			(biome != biOcean) && (biome != biFrozenOcean) &&  // The biome is acceptable (don't want a small ocean island)
 			!IsBlockWaterOrIce(GetBlock((int)m_SpawnX, GetHeight((int)m_SpawnX, (int)m_SpawnZ), (int)m_SpawnZ))  // The terrain is acceptable (don't want to spawn inside a lake / river)
 		)
 		{
-			// A good spawnpoint was found
-			break;
+			if (CheckPlayerSpawnPoint((int)m_SpawnX, GetHeight((int)m_SpawnX, (int)m_SpawnZ), (int)m_SpawnZ))
+			{
+				// A good spawnpoint was found
+				foundSpawnPoint = true;
+				break;
+			}
 		}
 		// Try a neighboring chunk:
 		if ((GetTickRandomNumber(4) % 2) == 0)  // Randomise whether to increment X or Z coords
@@ -693,8 +698,63 @@ void cWorld::GenerateRandomSpawn(void)
 	}  // for i - 100*
 
 	m_SpawnY = (double)GetHeight((int)m_SpawnX, (int)m_SpawnZ) + 1.6f;  // 1.6f to accomodate player height
+	if (foundSpawnPoint)
+	{
+		LOGINFO("Generated random spawnpoint position at {%i, %i, %i}", (int)m_SpawnX, (int)m_SpawnY, (int)m_SpawnZ);
+	}
+	else
+	{
+		LOGINFO("Did not find an acceptable spawnpoint. Generated a random spawnpoint position at {%i, %i, %i}", (int)m_SpawnX, (int)m_SpawnY, (int)m_SpawnZ);
+	}  // Maybe widen the search instead?
 
-	LOGINFO("Generated random spawnpoint position {%i, %i, %i}", (int)m_SpawnX, (int)m_SpawnY, (int)m_SpawnZ);
+}
+
+
+
+
+
+bool cWorld::CheckPlayerSpawnPoint(int a_PosX, int a_PosY, int a_PosZ)
+{
+	static const struct
+	{
+		int x, z;
+	} Coords[] =
+	{
+		{ 0, 0 },
+		{ -1, 0 },
+		{ 1, 0 },
+		{ 0, -1 },
+		{ 0, 1 },
+	};
+
+	// Checking that spawnblock and surrounding blocks are air and not water/lava
+	for (size_t i = 0; i < ARRAYCOUNT(Coords); i++)
+	{
+		BLOCKTYPE BlockType = GetBlock(a_PosX + Coords[i].x, a_PosY, a_PosZ + Coords[i].x);
+
+		if (cBlockInfo::IsSolid(BlockType) || IsBlockLiquid(BlockType))
+		{
+			return false;
+		}
+	}  // for i - Coords[]
+
+	// Check if block below is solid
+	BLOCKTYPE BlockType = GetBlock(a_PosX, a_PosY - 1, a_PosZ);
+	if (!cBlockInfo::IsSolid(BlockType))
+	{
+		return false;
+	}
+
+	// Checking that all the blocks above the spawnpoint is air.
+	for (int i = a_PosY; i < cChunkDef::Height; i++)
+	{
+		BLOCKTYPE BlockType = GetBlock(a_PosX, i, a_PosZ);
+		if (cBlockInfo::IsSolid(BlockType))
+		{
+			return false;
+		}
+	}
+	return true;
 }
 
 
@@ -816,10 +876,9 @@ void cWorld::Stop(void)
 	// Delete the clients that have been in this world:
 	{
 		cCSLock Lock(m_CSClients);
-		for (cClientHandleList::iterator itr = m_Clients.begin(); itr != m_Clients.end(); ++itr)
+		for (auto itr = m_Clients.begin(); itr != m_Clients.end(); ++itr)
 		{
 			(*itr)->Destroy();
-			delete *itr;
 		}  // for itr - m_Clients[]
 		m_Clients.clear();
 	}
@@ -1081,19 +1140,26 @@ void cWorld::TickScheduledTasks(void)
 
 void cWorld::TickClients(float a_Dt)
 {
-	cClientHandleList RemoveClients;
+	cClientHandlePtrs RemoveClients;
 	{
 		cCSLock Lock(m_CSClients);
 		
 		// Remove clients scheduled for removal:
-		for (cClientHandleList::iterator itr = m_ClientsToRemove.begin(), end = m_ClientsToRemove.end(); itr != end; ++itr)
+		for (auto itr = m_ClientsToRemove.begin(), end = m_ClientsToRemove.end(); itr != end; ++itr)
 		{
-			m_Clients.remove(*itr);
+			for (auto itrC = m_Clients.begin(), endC = m_Clients.end(); itrC != endC; ++itrC)
+			{
+				if (itrC->get() == *itr)
+				{
+					m_Clients.erase(itrC);
+					break;
+				}
+			}
 		}  // for itr - m_ClientsToRemove[]
 		m_ClientsToRemove.clear();
 		
 		// Add clients scheduled for adding:
-		for (cClientHandleList::iterator itr = m_ClientsToAdd.begin(), end = m_ClientsToAdd.end(); itr != end; ++itr)
+		for (auto itr = m_ClientsToAdd.begin(), end = m_ClientsToAdd.end(); itr != end; ++itr)
 		{
 			ASSERT(std::find(m_Clients.begin(), m_Clients.end(), *itr) == m_Clients.end());
 			m_Clients.push_back(*itr);
@@ -1101,7 +1167,7 @@ void cWorld::TickClients(float a_Dt)
 		m_ClientsToAdd.clear();
 		
 		// Tick the clients, take out those that have been destroyed into RemoveClients
-		for (cClientHandleList::iterator itr = m_Clients.begin(); itr != m_Clients.end();)
+		for (auto itr = m_Clients.begin(); itr != m_Clients.end();)
 		{
 			if ((*itr)->IsDestroyed())
 			{
@@ -1114,12 +1180,9 @@ void cWorld::TickClients(float a_Dt)
 			++itr;
 		}  // for itr - m_Clients[]
 	}
-	
-	// Delete the clients that have been destroyed
-	for (cClientHandleList::iterator itr = RemoveClients.begin(); itr != RemoveClients.end(); ++itr)
-	{
-		delete *itr;
-	}  // for itr - RemoveClients[]
+
+	// Delete the clients queued for removal:
+	RemoveClients.clear();
 }
 
 
@@ -3513,7 +3576,7 @@ void cWorld::AddQueuedPlayers(void)
 		cCSLock Lock(m_CSClients);
 		for (cPlayerList::iterator itr = PlayersToAdd.begin(), end = PlayersToAdd.end(); itr != end; ++itr)
 		{
-			cClientHandle * Client = (*itr)->GetClientHandle();
+			cClientHandlePtr Client = (*itr)->GetClientHandlePtr();
 			if (Client != nullptr)
 			{
 				m_Clients.push_back(Client);
@@ -3563,7 +3626,7 @@ void cWorld::cTaskUnloadUnusedChunks::Run(cWorld & a_World)
 
 
 ////////////////////////////////////////////////////////////////////////////////
-// cWorld::cTaskSendBlockTo
+// cWorld::cTaskSendBlockToAllPlayers
 
 cWorld::cTaskSendBlockToAllPlayers::cTaskSendBlockToAllPlayers(std::vector<Vector3i> & a_SendQueue) :
 	m_SendQueue(a_SendQueue)

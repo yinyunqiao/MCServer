@@ -23,7 +23,6 @@
 #ifdef _WIN32
 	#include <conio.h>
 	#include <psapi.h>
-	#include <ShObjIdl.h>
 #elif defined(__linux__)
 	#include <fstream>
 #elif defined(__APPLE__)
@@ -99,10 +98,6 @@ void cRoot::Start(void)
 	HWND hwnd = GetConsoleWindow();
 	HMENU hmenu = GetSystemMenu(hwnd, FALSE);
 	EnableMenuItem(hmenu, SC_CLOSE, MF_GRAYED);  // Disable close button when starting up; it causes problems with our CTRL-CLOSE handling
-
-	ITaskbarList3 * TaskbarIcon = nullptr;
-	CoInitialize(nullptr);
-	CoCreateInstance(CLSID_TaskbarList, nullptr, CLSCTX_INPROC_SERVER, IID_ITaskbarList3, (void **)&TaskbarIcon);
 	#endif
 	
 	cLogger::cListener * consoleLogListener = MakeConsoleListener();
@@ -129,7 +124,6 @@ void cRoot::Start(void)
 
 		LOG("Creating new server instance...");
 		m_Server = new cServer();
-		TaskbarIcon->SetProgressValue(hwnd, 5, 100);
 
 		LOG("Reading server config...");
 		cIniFile IniFile;
@@ -140,7 +134,6 @@ void cRoot::Start(void)
 			IniFile.AddHeaderComment(" Most of the settings here can be configured using the webadmin interface, if enabled in webadmin.ini");
 			IniFile.AddHeaderComment(" See: http://wiki.mc-server.org/doku.php?id=configure:settings.ini for further configuration help");
 		}
-		TaskbarIcon->SetProgressValue(hwnd, 10, 100);
 
 		LOG("Starting server...");
 		m_MojangAPI = new cMojangAPI;
@@ -152,89 +145,85 @@ void cRoot::Start(void)
 			LOGERROR("Failure starting server, aborting...");
 			return;
 		}
-		TaskbarIcon->SetProgressValue(hwnd, 15, 100);
 
 		m_WebAdmin = new cWebAdmin();
 		m_WebAdmin->Init();
-		TaskbarIcon->SetProgressValue(hwnd, 20, 100);
 
 		LOGD("Loading settings...");
 		m_RankManager.reset(new cRankManager());
 		m_RankManager->Initialize(*m_MojangAPI);
 		m_CraftingRecipes = new cCraftingRecipes;
-		m_FurnaceRecipe = new cFurnaceRecipe();
-		TaskbarIcon->SetProgressValue(hwnd, 25, 100);
+		m_FurnaceRecipe   = new cFurnaceRecipe();
 		
 		LOGD("Loading worlds...");
 		LoadWorlds(IniFile);
-		TaskbarIcon->SetProgressValue(hwnd, 40, 100);
 
 		LOGD("Loading plugin manager...");
 		m_PluginManager = new cPluginManager();
 		m_PluginManager->ReloadPluginsNow(IniFile);
-		TaskbarIcon->SetProgressValue(hwnd, 45, 100);
 		
 		LOGD("Loading MonsterConfig...");
 		m_MonsterConfig = new cMonsterConfig;
-		TaskbarIcon->SetProgressValue(hwnd, 50, 100);
 
 		// This sets stuff in motion
 		LOGD("Starting Authenticator...");
 		m_Authenticator.Start(IniFile);
-		TaskbarIcon->SetProgressValue(hwnd, 55, 100);
 		
 		LOGD("Starting worlds...");
 		StartWorlds();
-		TaskbarIcon->SetProgressValue(hwnd, 70, 100);
 		
 		if (IniFile.GetValueSetB("DeadlockDetect", "Enabled", true))
 		{
 			LOGD("Starting deadlock detector...");
 			dd.Start(IniFile.GetValueSetI("DeadlockDetect", "IntervalSec", 20));
 		}
-		TaskbarIcon->SetProgressValue(hwnd, 85, 100);
 		
 		IniFile.WriteFile("settings.ini");
 
 		LOGD("Finalising startup...");
-		m_Server->Start();		
-		m_WebAdmin->Start();
-		TaskbarIcon->SetProgressValue(hwnd, 90, 100);
-
-		#if !defined(ANDROID_NDK)
-		LOGD("Starting InputThread...");
-		try
+		if (m_Server->Start())
 		{
-			m_InputThread = std::thread(InputThread, std::ref(*this));
-			m_InputThread.detach();
-		}
-		catch (std::system_error & a_Exception)
-		{
-			LOGERROR("cRoot::Start (std::thread) error %i: could not construct input thread; %s", a_Exception.code().value(), a_Exception.what());
-		}
-		#endif
-		TaskbarIcon->SetProgressState(hwnd, TBPF_NOPROGRESS);
+			m_WebAdmin->Start();
 
-		LOG("Startup complete, took %ldms!", static_cast<long int>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - BeginTime).count()));
-		#ifdef _WIN32
-		EnableMenuItem(hmenu, SC_CLOSE, MF_ENABLED);  // Re-enable close button
-		#endif
+			#if !defined(ANDROID_NDK)
+			LOGD("Starting InputThread...");
+			try
+			{
+				m_InputThread = std::thread(InputThread, std::ref(*this));
+				m_InputThread.detach();
+			}
+			catch (std::system_error & a_Exception)
+			{
+				LOGERROR("cRoot::Start (std::thread) error %i: could not construct input thread; %s", a_Exception.code().value(), a_Exception.what());
+			}
+			#endif
 
-		while (!m_bStop && !m_bRestart && !m_TerminateEventRaised)  // These are modified by external threads
-		{
-			std::this_thread::sleep_for(std::chrono::seconds(1));
-		}
+			LOG("Startup complete, took %ldms!", static_cast<long int>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - BeginTime).count()));
+			#ifdef _WIN32
+			EnableMenuItem(hmenu, SC_CLOSE, MF_ENABLED);  // Re-enable close button
+			#endif
 
-		if (m_TerminateEventRaised)
+			while (!m_bStop && !m_bRestart && !m_TerminateEventRaised)  // These are modified by external threads
+			{
+				std::this_thread::sleep_for(std::chrono::seconds(1));
+			}
+
+			if (m_TerminateEventRaised)
+			{
+				m_bStop = true;
+			}
+
+			// Stop the server:
+			m_WebAdmin->Stop();
+
+			LOG("Shutting down server...");
+			m_Server->Shutdown();
+		}  // if (m_Server->Start())
+		else
 		{
 			m_bStop = true;
 		}
 
-		// Stop the server:
-		m_WebAdmin->Stop();
-
-		LOG("Shutting down server...");
-		m_Server->Shutdown();
 		delete m_MojangAPI; m_MojangAPI = nullptr;
 
 		LOGD("Shutting down deadlock detector...");

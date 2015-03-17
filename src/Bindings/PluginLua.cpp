@@ -857,6 +857,26 @@ bool cPluginLua::OnPlayerMoving(cPlayer & a_Player, const Vector3d & a_OldPositi
 
 
 
+bool cPluginLua::OnEntityTeleport(cEntity & a_Entity, const Vector3d & a_OldPosition, const Vector3d & a_NewPosition)
+{
+	cCSLock Lock(m_CriticalSection);
+	bool res = false;
+	cLuaRefs & Refs = m_HookMap[cPluginManager::HOOK_ENTITY_TELEPORT];
+	for (cLuaRefs::iterator itr = Refs.begin(), end = Refs.end(); itr != end; ++itr)
+	{
+		m_LuaState.Call((int)(**itr), &a_Entity, a_OldPosition, a_NewPosition, cLuaState::Return, res);
+		if (res)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+
+
+
+
 bool cPluginLua::OnPlayerPlacedBlock(cPlayer & a_Player, const sSetBlock & a_BlockChange)
 {
 	cCSLock Lock(m_CriticalSection);
@@ -1445,7 +1465,7 @@ bool cPluginLua::OnWorldTick(cWorld & a_World, std::chrono::milliseconds a_Dt, s
 
 
 
-bool cPluginLua::HandleCommand(const AStringVector & a_Split, cPlayer & a_Player)
+bool cPluginLua::HandleCommand(const AStringVector & a_Split, cPlayer & a_Player, const AString & a_FullCommand)
 {
 	ASSERT(!a_Split.empty());
 	CommandMap::iterator cmd = m_Commands.find(a_Split[0]);
@@ -1457,7 +1477,7 @@ bool cPluginLua::HandleCommand(const AStringVector & a_Split, cPlayer & a_Player
 	
 	cCSLock Lock(m_CriticalSection);
 	bool res = false;
-	m_LuaState.Call(cmd->second, a_Split, &a_Player, cLuaState::Return, res);
+	m_LuaState.Call(cmd->second, a_Split, &a_Player, a_FullCommand, cLuaState::Return, res);
 	return res;
 }
 
@@ -1465,7 +1485,7 @@ bool cPluginLua::HandleCommand(const AStringVector & a_Split, cPlayer & a_Player
 
 
 
-bool cPluginLua::HandleConsoleCommand(const AStringVector & a_Split, cCommandOutputCallback & a_Output)
+bool cPluginLua::HandleConsoleCommand(const AStringVector & a_Split, cCommandOutputCallback & a_Output, const AString & a_FullCommand)
 {
 	ASSERT(!a_Split.empty());
 	CommandMap::iterator cmd = m_ConsoleCommands.find(a_Split[0]);
@@ -1480,7 +1500,7 @@ bool cPluginLua::HandleConsoleCommand(const AStringVector & a_Split, cCommandOut
 	cCSLock Lock(m_CriticalSection);
 	bool res = false;
 	AString str;
-	m_LuaState.Call(cmd->second, a_Split, cLuaState::Return, res, str);
+	m_LuaState.Call(cmd->second, a_Split, a_FullCommand, cLuaState::Return, res, str);
 	if (res && !str.empty())
 	{
 		a_Output.Out(str);
@@ -1577,6 +1597,7 @@ const char * cPluginLua::GetHookFnName(int a_HookType)
 		case cPluginManager::HOOK_DISCONNECT:                   return "OnDisconnect";
 		case cPluginManager::HOOK_PLAYER_ANIMATION:             return "OnPlayerAnimation";
 		case cPluginManager::HOOK_ENTITY_ADD_EFFECT:            return "OnEntityAddEffect";
+		case cPluginManager::HOOK_ENTITY_TELEPORT:              return "OnEntityTeleport";
 		case cPluginManager::HOOK_EXECUTE_COMMAND:              return "OnExecuteCommand";
 		case cPluginManager::HOOK_HANDSHAKE:                    return "OnHandshake";
 		case cPluginManager::HOOK_KILLING:                      return "OnKilling";

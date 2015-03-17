@@ -57,6 +57,7 @@ public:
 	virtual bool OnCraftingNoRecipe         (cPlayer & a_Player, cCraftingGrid & a_Grid, cCraftingRecipe & a_Recipe) = 0;
 	virtual bool OnDisconnect               (cClientHandle & a_Client, const AString & a_Reason) = 0;
 	virtual bool OnEntityAddEffect          (cEntity & a_Entity, int a_EffectType, int a_EffectDurationTicks, int a_EffectIntensity, double a_DistanceModifier) = 0;
+	virtual bool OnEntityTeleport           (cEntity & a_Entity, const Vector3d & a_OldPosition, const Vector3d & a_NewPosition) = 0;
 	virtual bool OnExecuteCommand           (cPlayer * a_Player, const AStringVector & a_Split) = 0;
 	virtual bool OnExploded                 (cWorld & a_World, double a_ExplosionSize,   bool a_CanCauseFire,   double a_X, double a_Y, double a_Z, eExplosionSource a_Source, void * a_SourceData) = 0;
 	virtual bool OnExploding                (cWorld & a_World, double & a_ExplosionSize, bool & a_CanCauseFire, double a_X, double a_Y, double a_Z, eExplosionSource a_Source, void * a_SourceData) = 0;
@@ -110,12 +111,12 @@ public:
 	Command permissions have already been checked.
 	Returns true if command handled successfully
 	*/
-	virtual bool HandleCommand(const AStringVector & a_Split, cPlayer & a_Player) = 0;
+	virtual bool HandleCommand(const AStringVector & a_Split, cPlayer & a_Player, const AString & a_FullCommand) = 0;
 	
 	/** Handles the console command split into a_Split.
 	Returns true if command handled successfully. Output is to be sent to the a_Output callback.
 	*/
-	virtual bool HandleConsoleCommand(const AStringVector & a_Split, cCommandOutputCallback & a_Output) = 0;
+	virtual bool HandleConsoleCommand(const AStringVector & a_Split, cCommandOutputCallback & a_Output, const AString & a_FullCommand) = 0;
 	
 	/// All bound commands are to be removed, do any language-dependent cleanup here
 	virtual void ClearCommands(void) {}

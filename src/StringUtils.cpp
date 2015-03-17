@@ -140,6 +140,54 @@ AStringVector StringSplit(const AString & str, const AString & delim)
 
 
 
+AStringVector StringSplitWithQuotes(const AString & str, const AString & delim)
+{
+	AStringVector results;
+
+	size_t cutAt = 0;
+	size_t Prev = 0;
+	size_t cutAtQuote = 0;
+
+	while ((cutAt = str.find_first_of(delim, Prev)) != str.npos)
+	{
+		AString current = str.substr(Prev, cutAt - Prev);
+		if ((current.front() == '"') || (current.front() == '\''))
+		{
+			Prev += 1;
+			cutAtQuote = str.find_first_of(current.front(), Prev);
+			if (cutAtQuote != str.npos)
+			{
+				current = str.substr(Prev, cutAtQuote - Prev);
+				cutAt = cutAtQuote + 1;
+			}
+		}
+
+		results.push_back(std::move(current));
+		Prev = cutAt + 1;
+	}
+
+	if (Prev < str.length())
+	{
+		AString current = str.substr(Prev);
+
+		// If the remant is wrapped in matching quotes, remove them:
+		if (
+			(current.length() >= 2) &&
+			((current.front() == '"') || (current.front() == '\'')) &&
+			(current.front() == current.back())
+		)
+		{
+			current = current.substr(1, current.length() - 2);
+		}
+
+		results.push_back(current);
+	}
+
+	return results;
+}
+
+
+
 
 AStringVector StringSplitAndTrim(const AString & str, const AString & delim)
 {
@@ -899,6 +947,50 @@ bool SplitZeroTerminatedStrings(const AString & a_Strings, AStringVector & a_Out
 		res = true;
 	}
 	
+	return res;
+}
+
+
+
+
+
+AStringVector MergeStringVectors(const AStringVector & a_Strings1, const AStringVector & a_Strings2)
+{
+	// Initialize the resulting vector by the first vector:
+	AStringVector res = a_Strings1;
+
+	// Add each item from strings2 that is not already present:
+	for (auto item : a_Strings2)
+	{
+		if (std::find(res.begin(), res.end(), item) == res.end())
+		{
+			res.push_back(item);
+		}
+	}  // for item - a_Strings2[]
+
+	return res;
+}
+
+
+
+
+
+AString StringsConcat(const AStringVector & a_Strings, char a_Separator)
+{
+	// If the vector is empty, return an empty string:
+	if (a_Strings.empty())
+	{
+		return "";
+	}
+
+	// Concatenate the strings in the vector:
+	AString res;
+	res.append(a_Strings[0]);
+	for (auto itr = a_Strings.cbegin() + 1, end = a_Strings.cend(); itr != end; ++itr)
+	{
+		res.push_back(a_Separator);
+		res.append(*itr);
+	}
 	return res;
 }
 
