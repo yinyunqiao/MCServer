@@ -104,19 +104,19 @@ public:
 		}
 	}
 
-	template<typename U = T, typename std::enable_if<std::is_same<U, int>::value || std::is_same<U, eShrapnelLevel>::value, std::size_t>::type = 0>
+	template <typename U = T, typename std::enable_if<std::is_same<U, int>::value || std::is_same<U, eShrapnelLevel>::value, std::size_t>::type = 0>
 	void Write(cIniFile & a_IniFile)
 	{
 		a_IniFile.SetValueI(m_Keyname, m_ValueName, (int)m_StoredValue);
 	}
 
-	template<typename U = T, typename std::enable_if<std::is_same<U, bool>::value, std::size_t>::type = 0>
+	template <typename U = T, typename std::enable_if<std::is_same<U, bool>::value, std::size_t>::type = 0>
 	void Write(cIniFile & a_IniFile)
 	{
 		a_IniFile.SetValueB(m_Keyname, m_ValueName, m_StoredValue);
 	}
 
-	template<typename U = T, typename std::enable_if<!std::is_same<U, bool>::value && !std::is_same<U, int>::value && !std::is_same<U, eShrapnelLevel>::value, std::size_t>::type = 0>
+	template <typename U = T, typename std::enable_if<!std::is_same<U, bool>::value && !std::is_same<U, int>::value && !std::is_same<U, eShrapnelLevel>::value, std::size_t>::type = 0>
 	void Write(cIniFile & a_IniFile)
 	{
 		a_IniFile.SetValue(m_Keyname, m_ValueName, m_StoredValue);
