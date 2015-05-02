@@ -55,7 +55,7 @@ class cMapManager;
 class cMonster;
 class cPickup;
 class cPlayer;
-class cPlugin;
+class cPluginLua;
 class cPluginLua;
 class cPluginManager;
 class cProjectileEntity;
@@ -228,7 +228,6 @@ public:
 	void Push(cMonster * a_Monster);
 	void Push(cPickup * a_Pickup);
 	void Push(cPlayer * a_Player);
-	void Push(cPlugin * a_Plugin);
 	void Push(cPluginLua * a_Plugin);
 	void Push(cProjectileEntity * a_ProjectileEntity);
 	void Push(cTNTEntity * a_TNTEntity);

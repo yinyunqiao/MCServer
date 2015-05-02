@@ -242,7 +242,7 @@ bool cLuaState::HasFunction(const char * a_FunctionName)
 {
 	if (!IsValid())
 	{
-		// This happens if cPlugin::Initialize() fails with an error
+		// This happens if cPluginLua::Initialize() fails with an error
 		return false;
 	}
 
@@ -262,7 +262,7 @@ bool cLuaState::PushFunction(const char * a_FunctionName)
 
 	if (!IsValid())
 	{
-		// This happens if cPlugin::Initialize() fails with an error
+		// This happens if cPluginLua::Initialize() fails with an error
 		return false;
 	}
 	
@@ -733,18 +733,6 @@ void cLuaState::Push(cPlayer * a_Player)
 	ASSERT(IsValid());
 
 	tolua_pushusertype(m_LuaState, a_Player, "cPlayer");
-	m_NumCurrentFunctionArgs += 1;
-}
-
-
-
-
-
-void cLuaState::Push(cPlugin * a_Plugin)
-{
-	ASSERT(IsValid());
-
-	tolua_pushusertype(m_LuaState, a_Plugin, "cPlugin");
 	m_NumCurrentFunctionArgs += 1;
 }
 

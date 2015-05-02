@@ -1297,7 +1297,7 @@ static int tolua_cWorld_QueueTask(lua_State * tolua_S)
 	// Binding for cWorld::QueueTask
 	// Params: function
 	
-	// Retrieve the cPlugin from the LuaState:
+	// Retrieve the cPluginLua from the LuaState:
 	cPluginLua * Plugin = GetLuaPlugin(tolua_S);
 	if (Plugin == nullptr)
 	{
@@ -1367,7 +1367,7 @@ static int tolua_cWorld_ScheduleTask(lua_State * tolua_S)
 	// Binding for cWorld::ScheduleTask
 	// Params: function, Ticks
 	
-	// Retrieve the cPlugin from the LuaState:
+	// Retrieve the cPluginLua from the LuaState:
 	cPluginLua * Plugin = GetLuaPlugin(tolua_S);
 	if (Plugin == nullptr)
 	{
@@ -1404,21 +1404,6 @@ static int tolua_cWorld_ScheduleTask(lua_State * tolua_S)
 	Plugin->AddResettable(task);
 	World->ScheduleTask(DelayTicks, task);
 	return 0;
-}
-
-
-
-
-
-static int tolua_cPluginManager_GetAllPlugins(lua_State * tolua_S)
-{
-	// API function no longer available:
-	LOGWARNING("cPluginManager:GetAllPlugins() is no longer available, use cPluginManager:ForEachPlugin() instead");
-	cLuaState::LogStackTrace(tolua_S);
-
-	// Return an empty table:
-	lua_newtable(tolua_S);
-	return 1;
 }
 
 
@@ -1465,11 +1450,11 @@ static int tolua_cPluginManager_LogStackTrace(lua_State * S)
 
 static int tolua_cPluginManager_AddHook_FnRef(cPluginManager * a_PluginManager, cLuaState & S, int a_ParamIdx)
 {
-	// Helper function for cPluginmanager:AddHook() binding
+	// Helper function for cPluginManager:AddHook() binding
 	// Takes care of the new case (#121): args are HOOK_TYPE and CallbackFunction
 	// The arg types have already been checked
 	
-	// Retrieve the cPlugin from the LuaState:
+	// Retrieve the cPluginLua from the LuaState:
 	cPluginLua * Plugin = GetLuaPlugin(S);
 	if (Plugin == nullptr)
 	{
@@ -1505,15 +1490,15 @@ static int tolua_cPluginManager_AddHook_FnRef(cPluginManager * a_PluginManager, 
 
 static int tolua_cPluginManager_AddHook_DefFn(cPluginManager * a_PluginManager, cLuaState & S, int a_ParamIdx)
 {
-	// Helper function for cPluginmanager:AddHook() binding
+	// Helper function for cPluginManager:AddHook() binding
 	// Takes care of the old case (#121): args are cPluginLua and HOOK_TYPE
 	// The arg types have already been checked
 	
-	// Retrieve and check the cPlugin parameter
+	// Retrieve and check the cPluginLua parameter
 	cPluginLua * Plugin = (cPluginLua *)tolua_tousertype(S, a_ParamIdx, nullptr);
 	if (Plugin == nullptr)
 	{
-		LOGWARNING("cPluginManager.AddHook(): Invalid Plugin parameter, expected a valid cPlugin object. Hook not added");
+		LOGWARNING("cPluginManager.AddHook(): Invalid Plugin parameter, expected a valid cPluginLua object. Hook not added");
 		S.LogStackTrace();
 		return 0;
 	}
@@ -1603,9 +1588,9 @@ static int tolua_cPluginManager_AddHook(lua_State * tolua_S)
 		// The next params are a number and a function, assume style 1 or 2
 		return tolua_cPluginManager_AddHook_FnRef(PlgMgr, S, ParamIdx);
 	}
-	else if (tolua_isusertype(S, ParamIdx, "cPlugin", 0, &err) && lua_isnumber(S, ParamIdx + 1))
+	else if (tolua_isusertype(S, ParamIdx, "cPluginLua", 0, &err) && lua_isnumber(S, ParamIdx + 1))
 	{
-		// The next params are a cPlugin and a number, assume style 3 or 4
+		// The next params are a cPluginLua and a number, assume style 3 or 4
 		LOGINFO("cPluginManager.AddHook(): Deprecated format used, use cPluginManager.AddHook(HOOK_TYPE, CallbackFunction) instead. Fixing the call for you.");
 		S.LogStackTrace();
 		return tolua_cPluginManager_AddHook_DefFn(PlgMgr, S, ParamIdx);
@@ -1661,7 +1646,7 @@ static int tolua_cPluginManager_ForEachCommand(lua_State * tolua_S)
 		}
 
 	private:
-		virtual bool Command(const AString & a_Command, const cPlugin * a_Plugin, const AString & a_Permission, const AString & a_HelpString) override
+		virtual bool Command(const AString & a_Command, const cPluginLua * a_Plugin, const AString & a_Permission, const AString & a_HelpString) override
 		{
 			UNUSED(a_Plugin);
 			
@@ -1739,7 +1724,7 @@ static int tolua_cPluginManager_ForEachConsoleCommand(lua_State * tolua_S)
 		}
 
 	private:
-		virtual bool Command(const AString & a_Command, const cPlugin * a_Plugin, const AString & a_Permission, const AString & a_HelpString) override
+		virtual bool Command(const AString & a_Command, const cPluginLua * a_Plugin, const AString & a_Permission, const AString & a_HelpString) override
 		{
 			UNUSED(a_Plugin);
 			UNUSED(a_Permission);
@@ -1956,7 +1941,7 @@ static int tolua_cPluginManager_CallPlugin(lua_State * tolua_S)
 	
 	// Call the destination plugin using a plugin callback:
 	class cCallback :
-		public cPluginManager::cPluginCallback
+		public cPluginManager::cPluginLuaCallback
 	{
 	public:
 		int m_NumReturns;
@@ -1971,7 +1956,7 @@ static int tolua_cPluginManager_CallPlugin(lua_State * tolua_S)
 		const AString & m_FunctionName;
 		cLuaState & m_SrcLuaState;
 		
-		virtual bool Item(cPlugin * a_Plugin) override
+		virtual bool Item(cPluginLua * a_Plugin) override
 		{
 			if (!a_Plugin->IsLoaded())
 			{
@@ -1988,21 +1973,6 @@ static int tolua_cPluginManager_CallPlugin(lua_State * tolua_S)
 		return 0;
 	}
 	return Callback.m_NumReturns;
-}
-
-
-
-
-
-static int tolua_cPluginManager_FindPlugins(lua_State * tolua_S)
-{
-	// API function no longer exists:
-	LOGWARNING("cPluginManager:FindPlugins() is obsolete, use cPluginManager:RefreshPluginList() instead!");
-	cLuaState::LogStackTrace(tolua_S);
-
-	// Still, do the actual work performed by the API function when it existed:
-	cPluginManager::Get()->RefreshPluginList();
-	return 0;
 }
 
 
@@ -2346,46 +2316,6 @@ static int tolua_cPluginLua_AddWebTab(lua_State * tolua_S)
 
 
 
-static int tolua_cPlugin_GetDirectory(lua_State * tolua_S)
-{
-	cLuaState L(tolua_S);
-	
-	// Log the obsoletion warning:
-	LOGWARNING("cPlugin:GetDirectory() is obsolete, use cPlugin:GetFolderName() instead.");
-	L.LogStackTrace();
-	
-	// Retrieve the params:
-	cPlugin * Plugin = static_cast<cPluginLua *>(tolua_tousertype(tolua_S, 1, nullptr));
-	
-	// Get the folder name:
-	L.Push(Plugin->GetFolderName());
-	return 1;
-}
-
-
-
-
-
-static int tolua_cPlugin_GetLocalDirectory(lua_State * tolua_S)
-{
-	cLuaState L(tolua_S);
-	
-	// Log the obsoletion warning:
-	LOGWARNING("cPlugin:GetLocalDirectory() is obsolete, use cPlugin:GetLocalFolder() instead.");
-	L.LogStackTrace();
-	
-	// Retrieve the params:
-	cPlugin * Plugin = static_cast<cPluginLua *>(tolua_tousertype(tolua_S, 1, nullptr));
-	
-	// Get the folder:
-	L.Push(Plugin->GetLocalFolder());
-	return 1;
-}
-
-
-
-
-
 static int tolua_md5(lua_State * tolua_S)
 {
 	// Calculate the raw md5 checksum byte array:
@@ -2399,18 +2329,6 @@ static int tolua_md5(lua_State * tolua_S)
 	md5(SourceString, len, Output);
 	lua_pushlstring(tolua_S, (const char *)Output, ARRAYCOUNT(Output));
 	return 1;
-}
-
-
-
-
-
-/** Does the same as tolua_md5, but reports that the usage is obsolete and the plugin should use cCrypto.md5(). */
-static int tolua_md5_obsolete(lua_State * tolua_S)
-{
-	LOGWARNING("Using md5() is obsolete, please change your plugin to use cCryptoHash.md5()");
-	cLuaState::LogStackTrace(tolua_S);
-	return tolua_md5(tolua_S);
 }
 
 
@@ -3745,7 +3663,6 @@ void ManualBindings::Bind(lua_State * tolua_S)
 		tolua_function(tolua_S, "LOGERROR",              tolua_LOGERROR);
 		tolua_function(tolua_S, "Base64Encode",          tolua_Base64Encode);
 		tolua_function(tolua_S, "Base64Decode",          tolua_Base64Decode);
-		tolua_function(tolua_S, "md5",                   tolua_md5_obsolete);  // OBSOLETE, use cCryptoHash.md5() instead
 		
 		tolua_beginmodule(tolua_S, "cFile");
 			tolua_function(tolua_S, "GetFolderContents", tolua_cFile_GetFolderContents);
@@ -3834,22 +3751,15 @@ void ManualBindings::Bind(lua_State * tolua_S)
 			tolua_function(tolua_S, "ForEachTeam",      tolua_ForEach<cScoreboard, cTeam,      &cScoreboard::ForEachTeam>);
 		tolua_endmodule(tolua_S);
 		
-		tolua_beginmodule(tolua_S, "cPlugin");
-			tolua_function(tolua_S, "GetDirectory",      tolua_cPlugin_GetDirectory);
-			tolua_function(tolua_S, "GetLocalDirectory", tolua_cPlugin_GetLocalDirectory);
-		tolua_endmodule(tolua_S);
-		
 		tolua_beginmodule(tolua_S, "cPluginManager");
 			tolua_function(tolua_S, "AddHook",               tolua_cPluginManager_AddHook);
 			tolua_function(tolua_S, "BindCommand",           tolua_cPluginManager_BindCommand);
 			tolua_function(tolua_S, "BindConsoleCommand",    tolua_cPluginManager_BindConsoleCommand);
 			tolua_function(tolua_S, "CallPlugin",            tolua_cPluginManager_CallPlugin);
-			tolua_function(tolua_S, "DoWithPlugin",          tolua_StaticDoWith<cPluginManager, cPlugin, &cPluginManager::DoWithPlugin>);
-			tolua_function(tolua_S, "FindPlugins",           tolua_cPluginManager_FindPlugins);
+			tolua_function(tolua_S, "DoWithPlugin",          tolua_StaticDoWith<cPluginManager, cPluginLua, &cPluginManager::DoWithPlugin>);
 			tolua_function(tolua_S, "ForEachCommand",        tolua_cPluginManager_ForEachCommand);
 			tolua_function(tolua_S, "ForEachConsoleCommand", tolua_cPluginManager_ForEachConsoleCommand);
-			tolua_function(tolua_S, "ForEachPlugin",         tolua_StaticForEach<cPluginManager, cPlugin, &cPluginManager::ForEachPlugin>);
-			tolua_function(tolua_S, "GetAllPlugins",         tolua_cPluginManager_GetAllPlugins);
+			tolua_function(tolua_S, "ForEachPlugin",         tolua_StaticForEach<cPluginManager, cPluginLua, &cPluginManager::ForEachPlugin>);
 			tolua_function(tolua_S, "GetCurrentPlugin",      tolua_cPluginManager_GetCurrentPlugin);
 			tolua_function(tolua_S, "GetPlugin",             tolua_cPluginManager_GetPlugin);
 			tolua_function(tolua_S, "LogStackTrace",         tolua_cPluginManager_LogStackTrace);
