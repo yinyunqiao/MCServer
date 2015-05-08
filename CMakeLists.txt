@@ -54,11 +54,13 @@ endif()
 
 # This has to be done before any flags have been set up.
 if(${BUILD_TOOLS})
+	message("Building tools")
 	add_subdirectory(Tools/MCADefrag/)
 	add_subdirectory(Tools/ProtoProxy/)
 endif()
 
 if(${BUILD_UNSTABLE_TOOLS})
+	message("Building unstable tools")
 	add_subdirectory(Tools/GeneratorPerformanceTest/)
 endif()
 
@@ -75,6 +77,9 @@ endif()
 
 # The Expat library is linked in statically, make the source files aware of that:
 add_definitions(-DXML_STATIC)
+
+# Let Lua use additional checks on its C API. This is only compiled into Debug builds:
+add_definitions(-DLUA_USE_APICHECK)
 
 # Self Test Mode enables extra checks at startup
 if(${SELF_TEST})

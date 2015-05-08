@@ -18,6 +18,7 @@ SET (SRCS
 	BlockArea.cpp
 	BlockID.cpp
 	BlockInfo.cpp
+	Broadcaster.cpp
 	BoundingBox.cpp
 	ByteBuffer.cpp
 	ChatColor.cpp
@@ -77,6 +78,7 @@ SET (HDRS
 	BlockInServerPluginInterface.h
 	BlockInfo.h
 	BlockTracer.h
+	Broadcaster.h
 	BoundingBox.h
 	BuildInfo.h.cmake
 	ByteBuffer.h
@@ -324,4 +326,4 @@ endif ()
 if (WIN32)
 	target_link_libraries(${EXECUTABLE} expat tolualib ws2_32.lib Psapi.lib)
 endif()
-target_link_libraries(${EXECUTABLE} luaexpat jsoncpp polarssl zlib sqlite lua SQLiteCpp event_core event_extra)
+target_link_libraries(${EXECUTABLE} luaexpat jsoncpp mbedtls zlib sqlite lua SQLiteCpp event_core event_extra)

@@ -57,7 +57,7 @@
 	#include <stdlib.h>
 #endif
 
-
+#include "Broadcaster.h"
 
 
 
@@ -833,7 +833,7 @@ void cWorld::InitialiseAndLoadMobSpawningValues(cIniFile & a_IniFile)
 	AString DefaultMonsters;
 	switch (m_Dimension)
 	{
-		case dimOverworld: DefaultMonsters = "bat, cavespider, chicken, cow, creeper, enderman, horse, mooshroom, ocelot, pig, sheep, silverfish, skeleton, slime, spider, squid, wolf, zombie"; break;
+		case dimOverworld: DefaultMonsters = "bat, cavespider, chicken, cow, creeper, enderman, guardian, horse, mooshroom, ocelot, pig, rabbit, sheep, silverfish, skeleton, slime, spider, squid, wolf, zombie"; break;
 		case dimNether:    DefaultMonsters = "blaze, ghast, magmacube, skeleton, zombie, zombiepigman"; break;
 		case dimEnd:       DefaultMonsters = "enderman"; break;
 		case dimNotSet:    ASSERT(!"Dimension not set"); break;
@@ -1453,6 +1453,15 @@ bool cWorld::GetSignLines(int a_BlockX, int a_BlockY, int a_BlockZ, AString & a_
 bool cWorld::DoWithChunk(int a_ChunkX, int a_ChunkZ, cChunkCallback & a_Callback)
 {
 	return m_ChunkMap->DoWithChunk(a_ChunkX, a_ChunkZ, a_Callback);
+}
+
+
+
+
+
+bool cWorld::DoWithChunkAt(Vector3i a_BlockPos, std::function<bool(cChunk &)>  a_Callback)
+{
+	return m_ChunkMap->DoWithChunkAt(a_BlockPos, a_Callback);
 }
 
 
@@ -2237,14 +2246,6 @@ void cWorld::BroadcastEntityAnimation(const cEntity & a_Entity, char a_Animation
 	m_ChunkMap->BroadcastEntityAnimation(a_Entity, a_Animation, a_Exclude);
 }
 
-
-
-
-
-void cWorld::BroadcastParticleEffect(const AString & a_ParticleName, float a_SrcX, float a_SrcY, float a_SrcZ, float a_OffsetX, float a_OffsetY, float a_OffsetZ, float a_ParticleData, int a_ParticleAmount, cClientHandle * a_Exclude)
-{
-	m_ChunkMap->BroadcastParticleEffect(a_ParticleName, a_SrcX, a_SrcY, a_SrcZ, a_OffsetX, a_OffsetY, a_OffsetZ, a_ParticleData, a_ParticleAmount, a_Exclude);
-}
 
 
 
@@ -3769,6 +3770,11 @@ void cWorld::cChunkGeneratorCallbacks::CallHookChunkGenerated (cChunkDesc & a_Ch
 }
 
 
+
+cBroadcaster cWorld::GetBroadcaster()
+{
+	return cBroadcaster(this);
+}
 
 
 

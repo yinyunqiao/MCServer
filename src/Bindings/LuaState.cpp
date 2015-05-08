@@ -1121,6 +1121,23 @@ void cLuaState::GetStackValue(int a_StackPos, pWorld & a_ReturnedVal)
 
 
 
+void cLuaState::GetStackValue(int a_StackPos, pClientHandle & a_ReturnedVal)
+{
+	if (lua_isnil(m_LuaState, a_StackPos))
+	{
+		a_ReturnedVal = nullptr;
+		return;
+	}
+	tolua_Error err;
+	if (tolua_isusertype(m_LuaState, a_StackPos, "cClientHandle", false, &err))
+	{
+		a_ReturnedVal = *(reinterpret_cast<cClientHandle **>(lua_touserdata(m_LuaState, a_StackPos)));
+	}
+}
+
+
+
+
 bool cLuaState::CallFunction(int a_NumResults)
 {
 	ASSERT (m_NumCurrentFunctionArgs >= 0);  // A function must be pushed to stack first
@@ -1403,6 +1420,30 @@ bool cLuaState::CheckParamEnd(int a_Param)
 
 
 
+bool cLuaState::IsParamUserType(int a_Param, AString a_UserType)
+{
+	ASSERT(IsValid());
+	
+	tolua_Error tolua_err;
+	return tolua_isusertype(m_LuaState, a_Param, a_UserType.c_str(), 0, &tolua_err);
+}
+
+
+
+
+
+bool cLuaState::IsParamNumber(int a_Param)
+{
+	ASSERT(IsValid());
+	
+	tolua_Error tolua_err;
+	return tolua_isnumber(m_LuaState, a_Param, 0, &tolua_err);
+}
+
+
+
+
+
 bool cLuaState::ReportErrors(int a_Status)
 {
 	return ReportErrors(m_LuaState, a_Status);
@@ -1482,7 +1523,7 @@ int cLuaState::CallFunctionWithForeignParams(
 	if (!PushFunction(a_FunctionName.c_str()))
 	{
 		LOGWARNING("Function '%s' not found", a_FunctionName.c_str());
-		lua_pop(m_LuaState, 2);
+		lua_settop(m_LuaState, OldTop);
 		return -1;
 	}
 
@@ -1490,7 +1531,7 @@ int cLuaState::CallFunctionWithForeignParams(
 	if (CopyStackFrom(a_SrcLuaState, a_SrcParamStart, a_SrcParamEnd) < 0)
 	{
 		// Something went wrong, fix the stack and exit
-		lua_pop(m_LuaState, 2);
+		lua_settop(m_LuaState, OldTop);
 		m_NumCurrentFunctionArgs = -1;
 		m_CurrentFunctionName.clear();
 		return -1;
@@ -1501,13 +1542,8 @@ int cLuaState::CallFunctionWithForeignParams(
 	if (ReportErrors(s))
 	{
 		LOGWARN("Error while calling function '%s' in '%s'", a_FunctionName.c_str(), m_SubsystemName.c_str());
-		// Fix the stack.
-		// We don't know how many values have been pushed, so just get rid of any that weren't there initially
-		int CurTop = lua_gettop(m_LuaState);
-		if (CurTop > OldTop)
-		{
-			lua_pop(m_LuaState, CurTop - OldTop);
-		}
+		// Reset the stack:
+		lua_settop(m_LuaState, OldTop);
 		
 		// Reset the internal checking mechanisms:
 		m_NumCurrentFunctionArgs = -1;

@@ -1,3 +1,4 @@
+
 #pragma once
 
 /* Wanna use the pathfinder? Put this in your header file:
@@ -18,12 +19,8 @@ Put this in your .cpp:
 
 #include <unordered_map>
 
-/* MCServer forward declarations */
-#ifndef COMPILING_PATHFIND_DEBUGGER
-
-// fwd: cChunkMap.h
-typedef cItemCallback<cChunk> cChunkCallback;
-#endif
+//fwd: ../Chunk.h
+class cChunk;
 
 /* Various little structs and classes */
 enum class ePathFinderStatus {CALCULATING,  PATH_FOUND,  PATH_NOT_FOUND};
@@ -35,9 +32,6 @@ public:
 };
 
 class cPath
-#ifndef COMPILING_PATHFIND_DEBUGGER
-: public cChunkCallback
-#endif
 {
 public:
 	/** Creates a pathfinder instance. A Mob will probably need a single pathfinder instance for its entire life.
@@ -59,8 +53,8 @@ public:
 	@param a_EndingPoint "The block where the Zombie's knees want to be".
 	@param a_MaxSteps The maximum steps before giving up. */
 	cPath(
-		cWorld * a_World,
-		const Vector3d & a_StartingPoint, const Vector3d & a_EndingPoint, int a_MaxSteps,
+		cChunk & a_Chunk,
+		const Vector3i & a_StartingPoint, const Vector3i & a_EndingPoint, int a_MaxSteps,
 		double a_BoundingBoxWidth = 1, double a_BoundingBoxHeight = 2,
 		int a_MaxUp = 1, int a_MaxDown = 1
 	);
@@ -69,39 +63,43 @@ public:
 	~cPath();
 
 	/** Performs part of the path calculation and returns true if the path computation has finished. */
-	ePathFinderStatus Step();
+	ePathFinderStatus Step(cChunk & a_Chunk);
 
 	/* Point retrieval functions, inlined for performance. */
 	/** Returns the next point in the path. */
-	inline Vector3d GetNextPoint()
+	inline Vector3i GetNextPoint()
 	{
 		ASSERT(m_Status == ePathFinderStatus::PATH_FOUND);
-		return m_PathPoints[m_PointCount - 1 - (++m_CurrentPoint)];
+		return m_PathPoints[m_PathPoints.size() - 1 - (++m_CurrentPoint)];
 	}
 	/** Checks whether this is the last point or not. Never call getnextPoint when this is true. */
 	inline bool IsLastPoint()
 	{
 		ASSERT(m_Status == ePathFinderStatus::PATH_FOUND);
-		ASSERT(m_CurrentPoint != -1);  // You must call getFirstPoint at least once before calling this.
-		return (m_CurrentPoint == m_PointCount - 1);
+		return (m_CurrentPoint == m_PathPoints.size() - 1);
 	}
-	/** Get the point at a_index. Remark: Internally, the indexes are reversed. */
-	inline Vector3d GetPoint(int a_index)
+	inline bool IsFirstPoint()
 	{
 		ASSERT(m_Status == ePathFinderStatus::PATH_FOUND);
-		ASSERT(a_index < m_PointCount);
-		return m_PathPoints[m_PointCount - 1 - a_index];
+		return (m_CurrentPoint == 0);
+	}
+	/** Get the point at a_index. Remark: Internally, the indexes are reversed. */
+	inline Vector3i GetPoint(size_t a_index)
+	{
+		ASSERT(m_Status == ePathFinderStatus::PATH_FOUND);
+		ASSERT(a_index < m_PathPoints.size());
+		return m_PathPoints[m_PathPoints.size() - 1 - a_index];
 	}
 	/** Returns the total number of points this path has. */
 	inline int GetPointCount()
 	{
 		ASSERT(m_Status == ePathFinderStatus::PATH_FOUND);
-		return m_PointCount;
+		return m_PathPoints.size();
 	}
 
 	struct VectorHasher
 	{
-		std::size_t operator()(const Vector3d & a_Vector) const
+		std::size_t operator()(const Vector3i & a_Vector) const
 		{
 			// Guaranteed to have no hash collisions for any 128x128x128 area. Suitable for pathfinding.
 			int32_t t = 0;
@@ -117,7 +115,7 @@ public:
 private:
 
 	/* General */
-	bool IsSolid(const Vector3d & a_Location);  // Query our hosting world and ask it if there's a solid at a_location.
+	bool IsSolid(const Vector3i & a_Location);  // Query our hosting world and ask it if there's a solid at a_location.
 	bool Step_Internal();  // The public version just calls this version * CALCULATIONS_PER_CALL times.
 	void FinishCalculation();  // Clears the memory used for calculating the path.
 	void FinishCalculation(ePathFinderStatus a_NewStatus);  // Clears the memory used for calculating the path and changes the status.
@@ -125,37 +123,29 @@ private:
 	/* Openlist and closedlist management */
 	void OpenListAdd(cPathCell * a_Cell);
 	cPathCell * OpenListPop();
-	void ProcessIfWalkable(const Vector3d &a_Location, cPathCell * a_Parent, int a_Cost);
+	void ProcessIfWalkable(const Vector3i &a_Location, cPathCell * a_Parent, int a_Cost);
 
 	/* Map management */
 	void ProcessCell(cPathCell * a_Cell,  cPathCell * a_Caller,  int a_GDelta);
-	cPathCell * GetCell(const Vector3d & a_location);
+	cPathCell * GetCell(const Vector3i & a_location);
 
 	/* Pathfinding fields */
 	std::priority_queue<cPathCell *,  std::vector<cPathCell *>,  compareHeuristics> m_OpenList;
-	std::unordered_map<Vector3d,  cPathCell *, VectorHasher> m_Map;
-	Vector3d m_Destination;
-	Vector3d m_Source;
+	std::unordered_map<Vector3i,  cPathCell *, VectorHasher> m_Map;
+	Vector3i m_Destination;
+	Vector3i m_Source;
 	int m_StepsLeft;
 
 	/* Control fields */
 	ePathFinderStatus m_Status;
 
 	/* Final path fields */
-	int m_PointCount;
-	int m_CurrentPoint;
-	std::vector<Vector3d> m_PathPoints;
-	void AddPoint(Vector3d a_Vector);
+	size_t m_CurrentPoint;
+	std::vector<Vector3i> m_PathPoints;
 
-	/* Interfacing with MCServer's world */
-	cWorld * m_World;
-	#ifndef COMPILING_PATHFIND_DEBUGGER
-	Vector3d m_Item_CurrentBlock;  // Read by Item();, it's the only way to "pass it" parameters
-protected:
-	virtual bool Item(cChunk * a_Chunk) override;
-
-	/* Interfacing with Irrlicht, has nothing to do with MCServer*/
-	#else
+	/* Interfacing with the world */
+	cChunk * m_Chunk;  // Only valid inside Step()!
+	#ifdef COMPILING_PATHFIND_DEBUGGER
 	#include "../path_irrlicht.cpp"
 	#endif
 };
