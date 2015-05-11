@@ -165,7 +165,7 @@ bool cMonster::TickPathFinding(cChunk & a_Chunk)
 		m_Path = new cPath(a_Chunk, GetPosition().Floor(), m_PathFinderDestination.Floor(), 20);
 	}
 
-	switch (m_Path->Step(a_Chunk))
+	switch (m_Path->GetResultAsync(a_Chunk))
 	{
 		case ePathFinderStatus::PATH_NOT_FOUND:
 		{
@@ -320,8 +320,8 @@ bool cMonster::EnsureProperDestination(cChunk & a_Chunk)
 
 void cMonster::MoveToPosition(const Vector3d & a_Position)
 {
-		m_FinalDestination = a_Position;
-		m_IsFollowingPath = true;
+	m_FinalDestination = a_Position;
+	m_IsFollowingPath = true;
 }
 
 

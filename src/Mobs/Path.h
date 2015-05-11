@@ -18,6 +18,7 @@ Put this in your .cpp:
 #endif
 
 #include <unordered_map>
+#include <future>
 
 //fwd: ../Chunk.h
 class cChunk;
@@ -62,8 +63,7 @@ public:
 	/** Destroys the path and frees its memory. */
 	~cPath();
 
-	/** Performs part of the path calculation and returns true if the path computation has finished. */
-	ePathFinderStatus Step(cChunk & a_Chunk);
+	ePathFinderStatus GetResultAsync(cChunk & a_Chunk);
 
 	/* Point retrieval functions, inlined for performance. */
 	/** Returns the next point in the path. */
@@ -114,9 +114,12 @@ public:
 	};
 private:
 
+	/** Performs part of the path calculation and returns true if the path computation has finished. */
+	ePathFinderStatus Step(cChunk & a_Chunk);
+
 	/* General */
 	bool IsSolid(const Vector3i & a_Location);  // Query our hosting world and ask it if there's a solid at a_location.
-	bool Step_Internal();  // The public version just calls this version * CALCULATIONS_PER_CALL times.
+	bool StepOnce();  // The public version just calls this version * CALCULATIONS_PER_CALL times.
 	void FinishCalculation();  // Clears the memory used for calculating the path.
 	void FinishCalculation(ePathFinderStatus a_NewStatus);  // Clears the memory used for calculating the path and changes the status.
 
@@ -142,6 +145,9 @@ private:
 	/* Final path fields */
 	size_t m_CurrentPoint;
 	std::vector<Vector3i> m_PathPoints;
+
+	std::future<ePathFinderStatus> m_AsyncResult;
+	std::thread::id m_ThreadID;
 
 	/* Interfacing with the world */
 	cChunk * m_Chunk;  // Only valid inside Step()!
